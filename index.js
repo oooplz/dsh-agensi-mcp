@@ -116,6 +116,15 @@ function registerRoutes(ctx) {
               sendJson(res, 405, { ok: false, error: 'method not allowed' });
               return undefined;
             }
+            // The harness closes its own routes behind a session token; these are published
+            // on the same port for the card, so they must at least refuse a request that a
+            // page on another site could have forged. A browser sends `Origin` on every
+            // cross-origin POST; a same-origin one matches this host.
+            if (!sameOrigin(req)) {
+              log('rejected cross-origin ' + method + ' ' + suffix);
+              sendJson(res, 403, { ok: false, error: 'cross-origin request rejected' });
+              return undefined;
+            }
             try {
               return handler(res);
             } catch (error) {
@@ -675,6 +684,28 @@ function closeServer(server) {
     server?.closeAllConnections?.();
   } catch {
     // Already closed.
+  }
+}
+
+/**
+ * Whether a request may change state. The plugin's routes live on the harness port and are
+ * reachable by anything that can reach loopback, so a `POST` from a page on another origin
+ * is refused: `Origin` is present on every cross-origin browser request and matches this
+ * host for a same-origin one. A request with no `Origin` at all is a local client (curl, a
+ * test) and is allowed — it cannot carry a browser's cookies anywhere.
+ *
+ * @param {import('node:http').IncomingMessage} req - incoming request.
+ * @returns {boolean} true when the request may mutate state.
+ */
+function sameOrigin(req) {
+  const origin = String(req.headers.origin || '');
+  if (!origin) return true;
+  const host = String(req.headers.host || '');
+  try {
+    const parsed = new URL(origin);
+    return parsed.host === host;
+  } catch {
+    return false;
   }
 }
 

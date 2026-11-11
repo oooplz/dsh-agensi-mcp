@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-11-11
+
+### Fixed
+
+- The card's routes (`status`, `login`, `cancel`, `logout`) are published on the harness
+  port, where anything that can reach loopback can call them — more permissive than the
+  harness's own routes, which sit behind a session token. A `POST` whose `Origin` header
+  belongs to another site is now refused with `403` and logged; same-origin card requests
+  and local tools without an `Origin` keep working. This closes a forged-log-out / forged
+  sign-in annoyance, not a credential leak: the routes never return a token, and `GET
+  /status` exposes only times and scopes.
+
 ## [0.2.0] - 2026-11-11
 
 Sign-in, status and expiry move into the plugin page. The OAuth flow now runs inside the
@@ -88,5 +100,6 @@ First release. Agensi works as native `mcp__agensi__*` tools in DeepSeek Harness
 - Paid skills and paid tool calls are never bought automatically — the agent must ask
   the user first, and `get_skill` / `run_tool` need an explicit yes.
 
+[0.2.1]: https://github.com/oooplz/dsh-agensi-mcp/releases/tag/v0.2.1
 [0.2.0]: https://github.com/oooplz/dsh-agensi-mcp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/oooplz/dsh-agensi-mcp/releases/tag/v0.1.0

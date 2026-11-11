@@ -1,6 +1,6 @@
 {
   "name": "dsh-agensi-mcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Agensi (skill marketplace) as native mcp__agensi__* tools in DeepSeek Harness: a direct Streamable HTTP MCP connection with a sign-in card in the plugin page — OAuth 2.1, live status and expiry, no pasted tokens.",
   "type": "module",
   "keywords": [
