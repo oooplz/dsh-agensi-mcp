@@ -1,0 +1,52 @@
+{
+  "name": "dsh-agensi-mcp",
+  "version": "0.1.0",
+  "description": "Agensi (skill marketplace) as native mcp__agensi__* tools in DeepSeek Harness: a direct Streamable HTTP MCP connection whose credential comes from an OAuth 2.1 sign-in, never a pasted token.",
+  "type": "module",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "mcp",
+    "agensi",
+    "agent-skills",
+    "oauth"
+  ],
+  "license": "MIT",
+  "author": "yangjiacheng",
+  "homepage": "https://github.com/oooplz/dsh-agensi-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oooplz/dsh-agensi-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/oooplz/dsh-agensi-mcp/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "tools/oauth_login.py",
+    "tools/check.py",
+    "icon.svg",
+    "README.md",
+    "README.zh.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

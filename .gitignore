@@ -1,0 +1,20 @@
+# Dependencies and build output
+node_modules/
+*.tgz
+
+# Release scratch files
+payload.json
+release.json
+asset.json
+release-notes.md
+todo.md
+
+# Python bytecode from the OAuth helper
+__pycache__/
+*.pyc
+
+# Editors and OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

@@ -1,0 +1,23 @@
+{
+  "id": "dsh-agensi-mcp",
+  "type": "bundle",
+  "category": "tools",
+  "name": "Agensi Skills MCP",
+  "repo": "oooplz/dsh-agensi-mcp",
+  "spec": "dsh-agensi-mcp@0.1.0",
+  "package": "dsh-agensi-mcp",
+  "version": "0.1.0",
+  "description": "Agensi (skill marketplace) as native mcp__agensi__* tools in DeepSeek Harness: a direct Streamable HTTP MCP connection whose credential comes from an OAuth 2.1 sign-in, never a pasted token.",
+  "longDescription": "Connects DeepSeek Harness to the Agensi MCP endpoint (`https://mcp.agensi.io/mcp/auth`, Streamable HTTP) and registers its toolkit as `mcp__agensi__*`: `search_skills`, `get_skill`, `my_library`, `my_credits`, `quote_tool` / `run_tool` / `check_job` for Agensi's own image, video, voice, music and data tools, `find_tools`, `skill_tools`, and the creator tools.\n\nThe endpoint is protected by OAuth 2.1, and the harness MCP client speaks a URL plus static headers only — it has no interactive authorization step and no token store. So this bundle splits the job in two. A one-time helper (`tools/oauth_login.py`) runs the real flow: dynamic client registration, PKCE S256, the RFC 8707 `resource` indicator, a localhost callback, then the authorization-code exchange. The resulting bearer token is written to `~/.dsh/dsh-runtimes/agensi-mcp/config.json` (mode 0600 on POSIX; the user profile ACL on Windows) and reaches the MCP row through a Loader `!!js` expression, so nothing secret is ever committed and no token is typed into the conversation. There is deliberately no anonymous mode and no API-key field.\n\nTokens live one hour. The bundle's Host half renews the token a few minutes before expiry with the refresh-token grant and re-composes the MCP row, so the tools keep working through a long session with no user action; failures land in `status.json` / `plugin.log` and are retried rather than raised into startup. `tools/check.py` round-trips `initialize` + `tools/list` and prints the tool names, which is also the fastest way to see whether a network route or a credential is the problem.\n\nPaid skills and paid tool calls are never bought automatically: `get_skill` and `run_tool` are only used after the user says yes.",
+  "tags": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "agensi",
+    "mcp",
+    "agent-skills",
+    "oauth"
+  ],
+  "license": "MIT",
+  "author": "yangjiacheng",
+  "authorUrl": "https://github.com/oooplz"
+}

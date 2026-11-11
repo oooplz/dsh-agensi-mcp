@@ -1,0 +1,55 @@
+# Agensi (https://mcp.agensi.io/mcp/auth) as an MCP server for DeepSeek Harness.
+#
+# Agensi is a remote MCP endpoint protected by OAuth 2.1. Its discovery documents say
+# everything a connector needs:
+#
+#   protected resource metadata  https://mcp.agensi.io/.well-known/oauth-protected-resource/mcp/auth
+#   authorization server metadata https://mcp.agensi.io/.well-known/oauth-authorization-server
+#     registration_endpoint  /oauth/register   (dynamic client registration, public client)
+#     code_challenge_methods S256               (PKCE required)
+#     grant_types            authorization_code + refresh_token
+#     scopes                 read, install
+#
+# The MCP client in this harness supports a URL and static `headers` only — it has no
+# interactive authorization step of its own. So the sign-in runs outside it, once, and the
+# resulting access token is stored in `$DSH_HOME/dsh-runtimes/agensi-mcp/config.json`
+# (mode 0600) by `tools/oauth_login.py`. The row below reads that file at compose time and
+# sends the token as a bearer header; no token is ever written into this repository or
+# typed into the conversation.
+#
+# Config expressions are evaluated before any plugin runs, so the header expression below
+# reads the file synchronously through `process.getBuiltinModule` instead of waiting for a
+# service. `tools/oauth_login.py refresh` rewrites the same file; re-compose this row
+# afterwards (`plugin_manager` toggle, or a harness restart) for a new token to apply —
+# which is exactly what the first row below does by itself, a few minutes before expiry.
+#
+# Keep the two rows in this order: the Host half is what renews the token and re-composes
+# the row that reads it.
+- insert:
+    # Bundle's own Host half: `index.js` refreshes the token before it expires and asks the
+    # plugin manager to re-compose the MCP row, so the tools outlive a 1-hour credential.
+    - id: dsh-agensi-mcp
+      name: 'dsh-agensi-mcp'
+      config: {}
+    - id: agensi-mcp
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: agensi
+        transport: streamable-http
+        url: https://mcp.agensi.io/mcp/auth
+        # Only the header that exists is built, so an empty value can never shadow a real
+        # one. File path mirrors tools/oauth_login.py: $DSH_HOME (or ~/.dsh), then
+        # dsh-runtimes/agensi-mcp/config.json.
+        headers: !!js "(() => { try { const fs = process.getBuiltinModule('fs'), path = process.getBuiltinModule('path'), os = process.getBuiltinModule('os'), home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh'), config = JSON.parse(fs.readFileSync(path.join(home, 'dsh-runtimes', 'agensi-mcp', 'config.json'), 'utf8')), headers = {}; if (typeof config.accessToken === 'string' && config.accessToken) headers.Authorization = 'Bearer ' + config.accessToken; return headers; } catch (error) { return {}; } })()"
+        # Keep the harness healthy while the token is missing or expired: the failure is
+        # logged and the row reports its own transport error instead of rejecting startup.
+        failOnStartupError: false
+        # Installing a skill can take a while on the marketplace side.
+        toolCallTimeoutMs: 120000
+        # A row that gave up stays dead (`maxAttempts` is one-way); keep retrying with a
+        # bounded delay so a re-signed-in token applies after the row is re-composed.
+        reconnect:
+          enabled: true
+          initialDelayMs: 500
+          maxDelayMs: 5000
+          maxAttempts: 50

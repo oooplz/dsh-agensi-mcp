@@ -1,0 +1,9 @@
+# Keep line endings stable across Windows checkouts: the OAuth helper and the patch file
+# are consumed by Python and the Loader, not by cmd.exe.
+* text=auto
+*.js   text eol=lf
+*.py   text eol=lf
+*.yml  text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.svg  text eol=lf

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Agensi",
+    "description": "Connects Agensi (skill marketplace) over Streamable HTTP, so its skill search and install tools become mcp__agensi__* tools. Sign in with OAuth once; no token is pasted."
+  }
+}
