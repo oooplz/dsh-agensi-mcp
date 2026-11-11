@@ -1,126 +1,163 @@
 # dsh-agensi-mcp
 
-Agensi — the skill marketplace at [agensi.io](https://www.agensi.io) — as native
-`mcp__agensi__*` tools inside DeepSeek Harness. One remote MCP endpoint, spoken to
-directly by the harness's own MCP client over Streamable HTTP; this bundle supplies the
-row and the one thing the harness cannot do by itself: an OAuth 2.1 sign-in.
+[Agensi](https://www.agensi.io) — the skill marketplace — as native `mcp__agensi__*` tools in
+**DeepSeek Harness**, with a **sign-in card in the plugin page**: status, expiry time and a
+button, no terminal and no pasted token.
+
+English · [中文说明](README.zh.md)
 
 ```
-tools/oauth_login.py         OAuth 2.1 (DCR + PKCE + localhost callback)  ──►  $DSH_HOME/dsh-runtimes/agensi-mcp/config.json  (0600 on POSIX)
-                                                                                        │  read at compose time
-                                                                                        ▼
-cordis.patch.yml   ──  @deepseek-ai/dsh-mcp-client (streamable-http, bearer header)  ──►  https://mcp.agensi.io/mcp/auth
-                    ▲
-index.js (Host half)  refresh_token grant a few minutes before expiry ──► pluginManager.reload(['agensi-mcp'])
+plugin page (client.js)                Host half (index.js)                     MCP row
+  status · expiry · [Sign in]  ──►  OAuth 2.1: register → PKCE → loopback  ──►  @deepseek-ai/dsh-mcp-client
+                                    │                                          streamable-http
+                                    └─► $DSH_HOME/dsh-runtimes/agensi-mcp/config.json ──► Authorization: Bearer …
+                                        (tokens, 0600)                                   https://mcp.agensi.io/mcp/auth
 ```
 
-Two rows, in this order: `dsh-agensi-mcp` (the Host half, `index.js`) and `agensi-mcp`
-(the MCP connection).
+## What you get
 
-## Why a sign-in step exists at all
+One Streamable HTTP MCP connection to `https://mcp.agensi.io/mcp/auth`. The server advertises
+**25 tools**; the ones that matter day to day:
 
-`https://mcp.agensi.io/mcp/auth` answers an unauthenticated request with
+| Purpose | Tools |
+| :-- | :-- |
+| Find and load a skill | `search_skills`, `get_skill`, `list_categories`, `get_popular`, `get_creator` |
+| What the account owns | `my_library`, `my_credits`, `my_skills` |
+| Paid tools (quoted, user-approved) | `find_tools`, `skill_tools`, `quote_tool`, `run_tool`, `check_job`, `quote_status` |
+| Publishing skills | `submit_skill`, `update_skill`, `edit_changelog`, `upload_skill_media`, `creator_status`, `set_skill_tools` |
+| Feedback | `skill_feedback`, `review_skill`, `submit_skill_request` |
 
+Nothing here spends money on its own: paid skills and paid tool calls wait for an explicit
+"yes" from the user.
+
+## Install
+
+```powershell
+dsh plugin --profile <profile> add dsh-agensi-mcp
 ```
-HTTP/1.1 401 Unauthorized
-WWW-Authenticate: Bearer resource_metadata="https://mcp.agensi.io/.well-known/oauth-protected-resource/mcp/auth", scope="read install"
-```
 
-The harness MCP client accepts a `url` and static `headers`; it has no interactive
-authorization step and no token store. So the authorization-code flow runs once, out of
-band, and leaves a bearer token in a private file that the row reads. Nothing in this
-repository, and nothing in the conversation, ever holds the token.
-
-There is deliberately **no anonymous mode** and **no API-key field**: the endpoint only
-issues tokens through the OAuth grant described above.
+Then open **Settings → Plugins → Agensi**. The card appears under the plugin's description.
+Requirements: a DeepSeek Harness build with the Web UI. No extra runtime, no Python, no SDK —
+the plugin has no dependencies.
 
 ## Sign in
 
-The client is a public client (`token_endpoint_auth_method: none`), so registration is
-open and needs no secret — `start` registers one itself if `config.json` holds no client
-id yet:
+1. Open the Agensi plugin page.
+2. Click **Sign in to Agensi** — a new tab opens on Agensi.
+3. Sign in and click **Allow**.
+4. That tab shows *Agensi connected / Agensi 已连接*; close it. The card flips to
+   **Signed in** within a couple of seconds.
 
-```powershell
-python tools/oauth_login.py start
-```
+What happens in between, so nothing is a black box:
 
-`start` prints `AUTHORIZE_URL=…`. Open it, sign in to Agensi, click **Allow**; the browser
-lands on `http://127.0.0.1:8791/callback`, the helper writes `config.json` and prints
-`SIGNED_IN=1`. The client id is stored with the tokens and reused on later runs; set
-`AGENSI_CLIENT_ID` to register against a specific id instead, or run
-`python tools/oauth_login.py register` to only do the registration.
+- the plugin registers a **public OAuth client** through Agensi's dynamic registration
+  endpoint (no secret exists, nothing to copy);
+- it binds a **loopback listener** on `127.0.0.1:8791` (or 8792/8793 if taken) and sends the
+  browser there as the redirect URI, with **PKCE (S256)** and the RFC 8707 `resource`
+  indicator;
+- the authorization code is exchanged inside the harness process; tokens are written to
+  `$DSH_HOME/dsh-runtimes/agensi-mcp/config.json` (mode `0600` on POSIX);
+- the MCP row is re-composed so the new bearer token is used immediately.
 
-Then install this bundle and confirm the tools:
+Other buttons: **Sign in again** (re-authorize without signing out first), **Sign out** (clears
+the stored tokens, keeps the client registration), **Cancel** while a browser round-trip is
+pending.
 
-```powershell
-dsh plugin --profile <profile> add dsh-agensi-mcp@latest
-# or, inside a session, from a local checkout:
-#   plugin_manager install_bundle  file:C:/path/to/dsh-agensi-mcp
-```
+## What the card shows
 
-```
-mcp__agensi__search_skills   (or whichever tool names tools/list returns)
-```
+| Field | Meaning |
+| :-- | :-- |
+| Status dot + label | `Signed in` / `Not signed in` / `Expired` |
+| Expires | local time of expiry plus a countdown (`15:42 · 42 min left`) |
+| Scopes | what the token was granted (`read install`) |
+| Error line | the last sign-in or renewal failure, verbatim |
 
-## Renew
+The card polls the host: every 15 s when idle, every 2 s while a sign-in is waiting for the
+browser.
 
-Access tokens live **1 hour** (`expires_in: 3600`). The Host half (`index.js`) checks once
-a minute and, five minutes before expiry, runs the `refresh_token` grant, rewrites
-`config.json` and re-composes the `agensi-mcp` row — so the tools keep working across a
-long session with no user action. `status.json` records the outcome (`expiresAt`,
-`refreshedAt`, `reload`).
+## Token renewal
 
-Manual paths, when the Host half cannot help (it is disabled, or the harness is not
-running):
+Agensi access tokens live **1 hour**. The Host half refreshes through the refresh-token grant
+five minutes before expiry, rewrites the token file and re-composes the MCP row, so a long
+session keeps working without the user doing anything. A failed renewal is logged, recorded
+in `status.json`, and retried after ten minutes. If the grant was revoked, the card says so and
+**Sign in again** is the fix.
 
-```powershell
-python tools/oauth_login.py refresh   # refresh_token grant, rewrites config.json
-python tools/check.py                 # initialize + tools/list, refreshes on 401 once
-```
+## Languages
 
-After a manual refresh, toggle this bundle off and on in the Plugin Manager
-(`plugin_manager` `set_bundle`) so the new token reaches the row's `headers`. If the grant
-was revoked, `refresh` reports an invalid grant: run `start` again for a fresh sign-in.
+The card follows the **harness UI language** (Settings → General → Language), not the OS:
+English and Chinese are built in, and a language switch repaints live cards immediately.
+
+- UI copy lives in the `I18N` table in `client.js` (a client half cannot import modules).
+- `locale/en.json` and `locale/zh.json` carry the plugin title and description shown in the
+  plugin list before activation.
+- To add a language: add a dictionary under its key in `I18N`, plus `locale/<lang>.json` with
+  `meta.title` / `meta.description`. Keys fall back to English.
+
+## Privacy
+
+- The token exists in exactly one place: `config.json` under `$DSH_HOME/dsh-runtimes/agensi-mcp/`.
+  It is never committed, never logged, and never returned by the plugin's routes — `status`
+  exposes times and scopes only.
+- The plugin talks to `mcp.agensi.io` and nothing else. It sends no telemetry.
+- Signing out deletes the tokens from that file.
 
 ## Files
 
+Repository:
+
 | Path | Role |
 | :-- | :-- |
-| `cordis.patch.yml` | Inserts the Host half, then the `@deepseek-ai/dsh-mcp-client` row (`serverName: agensi`, `streamable-http`, bearer header from `config.json`) |
-| `index.js` | Host half: renews the token before expiry and re-composes the MCP row |
-| `tools/oauth_login.py` | OAuth 2.1 helper: `start` / `url` / `refresh` |
-| `tools/check.py` | Handshake check (`initialize` + `tools/list`) that prints tool names and changes no MCP data; it may renew the stored token once, on a 401 |
+| `cordis.patch.yml` | Inserts the Host half, then the `@deepseek-ai/dsh-mcp-client` row (bearer header read from the token file) |
+| `index.js` | Host half: OAuth flow, renewal, `status`/`login`/`cancel`/`logout` routes |
+| `client.js` | Plugin-page card: status, expiry, sign-in/sign-out, i18n |
 | `locale/{en,zh}.json` | Plugin title and description |
-| `$DSH_HOME/dsh-runtimes/agensi-mcp/config.json` | Runtime token store, mode `0600` on POSIX (on Windows the file inherits the user profile ACL) — not part of the repository |
-| `$DSH_HOME/dsh-runtimes/agensi-mcp/status.json` | What the Host half last observed |
-| `$DSH_HOME/dsh-runtimes/agensi-mcp/plugin.log` | Append-only trail: sign-in, each renewal, each row re-compose (a renewal logs two lines) |
+| `icon.svg` | Plugin icon |
 
-## Install and develop
+Runtime (created on demand, not part of the repository):
+
+| Path | Meaning |
+| :-- | :-- |
+| `$DSH_HOME/dsh-runtimes/agensi-mcp/config.json` | Client id, tokens, expiry — mode `0600` on POSIX, profile ACL on Windows |
+| `$DSH_HOME/dsh-runtimes/agensi-mcp/status.json` | What the last renewal pass observed |
+| `$DSH_HOME/dsh-runtimes/agensi-mcp/plugin.log` | Append-only trail: sign-in, renewal, row re-compose, failures |
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+| :-- | :-- | :-- |
+| Card says *cannot listen on 127.0.0.1:8791–8793* | something else owns those ports | close it, then click Sign in again |
+| Card stays *Waiting for the browser…* | the tab was closed before Allow | click the link in the card, or Cancel and retry |
+| Card shows *Signed in* but tools fail with 401 | the grant was revoked while the token still looked valid | **Sign in again** |
+| No `mcp__agensi__*` tools at all | the MCP row did not connect | toggle the plugin off and on; read `plugin.log` |
+| *The plugin host did not answer* | the Host half is disabled or the harness is headless | check `status.json` |
+
+Ports can be inspected with `netstat -ano | findstr :8791` on Windows.
+
+## Development
 
 ```powershell
-# users: from the registry (the harness holds back very fresh releases, so pin if needed)
-dsh plugin --profile <profile> add dsh-agensi-mcp@0.1.0
-
-# developers: install a local checkout; the profile keeps a copy, so re-install after edits
-plugin_manager install_bundle  file:C:/project/dsh-plugins/dsh-agensi-mcp
-# pick up an edit: remove + install again, or overwrite the installed copy (rm first),
-# then toggle the bundle off and on
+git clone https://github.com/oooplz/dsh-agensi-mcp
+cd dsh-agensi-mcp
 ```
 
-Requirements: nothing beyond what the harness already ships — the Host half runs inside it,
-the MCP connection borrows its MCP client, and the bundle has no runtime dependencies —
-plus Python 3.9+ for the one-time sign-in helper.
+A profile keeps a copy of an installed bundle, so publishing an edit means re-installing:
 
-`expiresAt` in `config.json` is **milliseconds** since epoch, the unit `index.js`
-compares against `Date.now()`. An `expiresAt` in seconds is recognised by magnitude
-(`toMs`), so an older file cannot cause a refresh loop.
+```
+plugin_manager install_bundle  file:<path-to-your-checkout>
+```
+
+Toggling the bundle off and on picks up a change in a running harness. `node --check
+index.js` and `node --check client.js` catch syntax errors before that.
 
 ## Known limits
 
-- The harness cannot show a "Sign in" button for this row; sign-in is the helper command
-  above. A harness-side OAuth connector would need `authProvider` support in
-  `@deepseek-ai/dsh-mcp-client`, which it does not have today.
-- The client id lives in `config.json` alongside the tokens; delete that file and it is
-  gone. Registration is open, so `start` simply registers a new client.
-- Buying or paying for a skill is never automatic: `get_skill` is only called after an
-  explicit "yes" from the user.
+- The card is served by the harness Web UI; a headless profile can still renew tokens but has
+  no page to show.
+- The OAuth client registration belongs to the token file. Delete that file and the plugin
+  registers a new client on the next sign-in — nothing to recover by hand.
+- Buying skills and paid tool calls is always a separate, explicit confirmation.
+
+## License
+
+MIT

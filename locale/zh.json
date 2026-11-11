@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Agensi",
-    "description": "以 Streamable HTTP 接入 Agensi（技能市场）：搜索与安装技能的工具变成 mcp__agensi__* 工具。只需用 OAuth 登录一次，不需要粘贴任何令牌。"
+    "description": "以 Streamable HTTP 接入 Agensi（技能市场）：搜索与安装技能的工具变成 mcp__agensi__* 工具。插件详情页显示登录状态与过期时间，点按钮用 OAuth 登录，不需要粘贴令牌。"
   }
 }
